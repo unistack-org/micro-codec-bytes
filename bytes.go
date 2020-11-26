@@ -9,6 +9,11 @@ import (
 	"github.com/unistack-org/micro/v3/codec"
 )
 
+type Message struct {
+	Header map[string]string
+	Body   []byte
+}
+
 type Codec struct {
 	Conn io.ReadWriteCloser
 }
@@ -18,13 +23,13 @@ type Frame struct {
 	Data []byte
 }
 
-func (c *Codec) ReadHeader(m *codec.Message, t codec.MessageType) error {
+func (c *Codec) ReadHeader(conn io.ReadWriter, m *codec.Message, t codec.MessageType) error {
 	return nil
 }
 
-func (c *Codec) ReadBody(b interface{}) error {
+func (c *Codec) ReadBody(conn io.ReadWriter, b interface{}) error {
 	// read bytes
-	buf, err := ioutil.ReadAll(c.Conn)
+	buf, err := ioutil.ReadAll(conn)
 	if err != nil {
 		return err
 	}
@@ -41,7 +46,7 @@ func (c *Codec) ReadBody(b interface{}) error {
 	return nil
 }
 
-func (c *Codec) Write(m *codec.Message, b interface{}) error {
+func (c *Codec) Write(conn io.ReadWriter, m *codec.Message, b interface{}) error {
 	var v []byte
 	switch vb := b.(type) {
 	case nil:
@@ -55,20 +60,36 @@ func (c *Codec) Write(m *codec.Message, b interface{}) error {
 	default:
 		return fmt.Errorf("failed to write: %v is not type of *[]byte or []byte", b)
 	}
-	_, err := c.Conn.Write(v)
+	_, err := conn.Write(v)
 	return err
-}
-
-func (c *Codec) Close() error {
-	return c.Conn.Close()
 }
 
 func (c *Codec) String() string {
 	return "bytes"
 }
 
-func NewCodec(c io.ReadWriteCloser) codec.Codec {
-	return &Codec{
-		Conn: c,
+func NewCodec() codec.Codec {
+	return &Codec{}
+}
+
+func (n *Codec) Marshal(v interface{}) ([]byte, error) {
+	switch ve := v.(type) {
+	case *[]byte:
+		return *ve, nil
+	case []byte:
+		return ve, nil
+	case *Message:
+		return ve.Body, nil
 	}
+	return nil, codec.ErrInvalidMessage
+}
+
+func (n *Codec) Unmarshal(d []byte, v interface{}) error {
+	switch ve := v.(type) {
+	case *[]byte:
+		*ve = d
+	case *Message:
+		ve.Body = d
+	}
+	return codec.ErrInvalidMessage
 }
